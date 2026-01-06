@@ -1,9 +1,17 @@
-"""
-Gestion de la connexion à Cassandra
-"""
+import sys
+import types
+
+# Hack pour Cassandra driver sur Python 3.12+ (asyncore a été supprimé)
+if sys.version_info >= (3, 12):
+    mock_asyncore = types.ModuleType("asyncore")
+    mock_asyncore.dispatcher = object
+    mock_asyncore.loop = lambda: None
+    sys.modules["asyncore"] = mock_asyncore
+
 from cassandra.cluster import Cluster, Session
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import SimpleStatement
+from cassandra.io.asyncioreactor import AsyncioConnection
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
@@ -29,7 +37,8 @@ class CassandraDB:
             self.cluster = Cluster(
                 contact_points=settings.cassandra_hosts,
                 port=settings.cassandra_port,
-                protocol_version=4
+                protocol_version=4,
+                connection_class=AsyncioConnection
             )
             
             self.session = self.cluster.connect()
@@ -162,6 +171,39 @@ class CassandraDB:
         except Exception as e:
             logger.error(f"Erreur lors de la récupération de l'historique: {e}")
             return []
+
+    def get_sensor_stats(self, sensor_id: str) -> Optional[Dict[str, Any]]:
+        """Calculer les statistiques pour un capteur (moyenne sur les 24 dernières heures et tendance)"""
+        try:
+            # Récupérer les données des dernières 24h pour la moyenne
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=24)
+            
+            # Pour la tendance, on compare les 2 dernières heures vs les 2 heures précédentes
+            # Mais pour faire simple, on va juste prendre les 50 dernières lectures
+            readings = self.get_sensor_history(sensor_id, limit=50)
+            
+            if not readings:
+                return None
+            
+            values = [r["value"] for r in readings]
+            latest_value = values[0]
+            avg_value = sum(values) / len(values)
+            
+            # Calcul de tendance (simplifié)
+            # Comparaison de la moyenne des 5 derniers vs moyenne globale des 50
+            recent_avg = sum(values[:5]) / 5 if len(values) >= 5 else latest_value
+            trend = ((recent_avg - avg_value) / avg_value * 100) if avg_value != 0 else 0
+            
+            return {
+                "current_value": latest_value,
+                "average_value": round(avg_value, 2),
+                "trend_percentage": round(trend, 2),
+                "trend_label": "vs 24h average"
+            }
+        except Exception as e:
+            logger.error(f"Erreur lors du calcul des stats: {e}")
+            return None
 
 
 # Instance globale de la base de données

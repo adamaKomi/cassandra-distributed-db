@@ -4,16 +4,31 @@ export interface SensorDataPoint {
 }
 
 export interface SensorStats {
-  currentValue: number;
-  averageValue: number;
-  trendPercentage: number;
-  trendLabel: string;
+  current_value: number;
+  average_value: number;
+  trend_percentage: number;
+  trend_label: string;
 }
 
 export interface Sensor {
-  id: string;
-  name: string;
-  location: string;
+  sensor_id: string;
+  last_reading?: SensorReading;
+  stats?: SensorStats;
+  total_readings?: number;
+}
+
+export type SensorInfo = Sensor;
+
+export interface SensorReading {
+  sensor_id: string;
+  timestamp: string;
+  value: number;
+}
+
+export interface SensorHistoryResponse {
+  sensor_id: string;
+  readings: SensorReading[];
+  count: number;
 }
 
 export interface DashboardData {

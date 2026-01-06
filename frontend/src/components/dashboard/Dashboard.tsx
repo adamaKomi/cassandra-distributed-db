@@ -5,25 +5,61 @@ import { SensorService } from '../../services/SensorService';
 import type { DashboardData, Sensor } from '../../types';
 
 const Dashboard: React.FC = () => {
-  const [selectedSensorId, setSelectedSensorId] = useState('s1');
+  const [selectedSensorId, setSelectedSensorId] = useState('');
   const [selectedRange, setSelectedRange] = useState<'live' | '1h' | '24h' | '7d'>('live');
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Load available sensors on mount
   useEffect(() => {
-    SensorService.getSensors().then(setSensors);
+    SensorService.getSensors()
+      .then(list => {
+        setSensors(list);
+        if (list.length > 0 && !selectedSensorId) {
+            setSelectedSensorId(list[0].sensor_id);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load sensors:', err);
+        setError('Impossible de récupérer la liste des capteurs. Vérifiez que l\'API est lancée.');
+        setLoading(false);
+      });
   }, []);
 
   // Load dashboard data when sensor or range changes
   useEffect(() => {
+    if (!selectedSensorId) return;
     setLoading(true);
-    SensorService.getDashboardData(selectedSensorId, selectedRange).then(data => {
-      setData(data);
-      setLoading(false);
-    });
+    setError(null);
+    SensorService.getDashboardData(selectedSensorId, selectedRange)
+      .then(data => {
+        setData(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Dashboard data error:', err);
+        setError('Données indisponibles pour ce capteur.');
+        setLoading(false);
+      });
   }, [selectedSensorId, selectedRange]);
+
+  if (error && !data) {
+    return (
+      <div className="flex flex-col h-64 items-center justify-center text-center p-8">
+        <span className="material-symbols-outlined text-red-500 text-5xl mb-4">error</span>
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Erreur de connexion</h3>
+        <p className="text-slate-500 max-w-sm">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-6 px-6 py-2 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition-colors"
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
@@ -49,8 +85,8 @@ const Dashboard: React.FC = () => {
               className="appearance-none w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 group-hover:border-primary/50 text-slate-900 dark:text-white text-base font-semibold rounded-xl py-3.5 pl-5 pr-12 focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all cursor-pointer shadow-soft"
             >
               {sensors.map(sensor => (
-                <option key={sensor.id} value={sensor.id}>
-                  {sensor.name} ({sensor.location})
+                <option key={sensor.sensor_id} value={sensor.sensor_id}>
+                  {sensor.sensor_id}
                 </option>
               ))}
             </select>
@@ -64,15 +100,15 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <StatCard 
           title="Current Reading" 
-          value={`${data.stats.currentValue}°C`} 
+          value={`${data.stats.current_value}°C`} 
           icon="thermostat" 
-          trend={`+${data.stats.trendPercentage}%`} 
-          trendLabel={data.stats.trendLabel}
+          trend={`${data.stats.trend_percentage > 0 ? '+' : ''}${data.stats.trend_percentage}%`} 
+          trendLabel={data.stats.trend_label}
           color="primary"
         />
         <StatCard 
           title="Avg Value" 
-          value={`${data.stats.averageValue}°C`} 
+          value={`${data.stats.average_value}°C`} 
           subValueLabel="Daily Average"
           icon="bolt" 
         />
@@ -80,7 +116,7 @@ const Dashboard: React.FC = () => {
 
       <ChartSection 
         data={data.history} 
-        currentValue={data.stats.currentValue} 
+        currentValue={data.stats.current_value} 
         selectedRange={selectedRange}
         onRangeChange={setSelectedRange}
       />

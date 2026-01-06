@@ -13,6 +13,7 @@ from database import db
 from models import (
     SensorReading,
     SensorInfo,
+    SensorStats,
     SensorHistoryResponse,
     HealthResponse
 )
@@ -112,10 +113,12 @@ async def get_all_sensors():
         sensors_info = []
         for sensor_id in sensor_ids:
             latest = db.get_latest_reading(sensor_id)
+            stats = db.get_sensor_stats(sensor_id)
             
             sensor_info = SensorInfo(
                 sensor_id=sensor_id,
                 last_reading=SensorReading(**latest) if latest else None,
+                stats=SensorStats(**stats) if stats else None,
                 total_readings=0  # Pourrait être calculé si nécessaire
             )
             sensors_info.append(sensor_info)
@@ -124,6 +127,36 @@ async def get_all_sensors():
         
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des capteurs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sensors/{sensor_id}", response_model=SensorInfo, tags=["Sensors"])
+async def get_sensor_info(sensor_id: str):
+    """
+    Obtenir les informations et statistiques d'un capteur spécifique
+    """
+    try:
+        # Vérifier si le capteur existe
+        sensor_ids = db.get_all_sensors()
+        if sensor_id not in sensor_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Capteur {sensor_id} non trouvé"
+            )
+            
+        latest = db.get_latest_reading(sensor_id)
+        stats = db.get_sensor_stats(sensor_id)
+        
+        return SensorInfo(
+            sensor_id=sensor_id,
+            last_reading=SensorReading(**latest) if latest else None,
+            stats=SensorStats(**stats) if stats else None,
+            total_readings=0
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des infos du capteur: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

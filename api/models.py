@@ -22,10 +22,19 @@ class SensorReading(BaseModel):
         }
 
 
+class SensorStats(BaseModel):
+    """Statistiques d'un capteur"""
+    current_value: float
+    average_value: float
+    trend_percentage: float
+    trend_label: str
+
+
 class SensorInfo(BaseModel):
     """Informations sur un capteur"""
     sensor_id: str
     last_reading: Optional[SensorReading] = None
+    stats: Optional[SensorStats] = None
     total_readings: int = 0
 
 

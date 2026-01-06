@@ -1,7 +1,7 @@
 """
 Configuration de l'API REST pour le projet Cassandra IoT
 """
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import List
 
 

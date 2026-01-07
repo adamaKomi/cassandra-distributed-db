@@ -4,14 +4,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000
 
 export const SensorService = {
   getSensors: async (): Promise<Sensor[]> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/sensors`);
-      if (!response.ok) throw new Error('Failed to fetch sensors');
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching sensors:', error);
-      return [];
-    }
+    // Liste statique des 50 capteurs simulés
+    const sensors: Sensor[] = Array.from({ length: 50 }, (_, i) => ({
+      sensor_id: `sensor_${String(i + 1).padStart(3, '0')}`
+    }));
+    return Promise.resolve(sensors);
   },
 
   getSensorById: async (sensorId: string): Promise<Sensor | null> => {

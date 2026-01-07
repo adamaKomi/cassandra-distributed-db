@@ -2,16 +2,75 @@ import sys
 import types
 
 # Hack pour Cassandra driver sur Python 3.12+ (asyncore a été supprimé)
+# Le module asyncore a été supprimé, on crée un mock complet
 if sys.version_info >= (3, 12):
     mock_asyncore = types.ModuleType("asyncore")
-    mock_asyncore.dispatcher = object
-    mock_asyncore.loop = lambda: None
+
+    class MockDispatcher:
+        """Mock de asyncore.dispatcher pour Python 3.12+"""
+        _map = {}
+        connected = False
+        accepting = False
+        connecting = False
+        closing = False
+        addr = None
+
+        def __init__(self, sock=None, map=None):
+            self.socket = sock
+            if map is None:
+                map = MockDispatcher._map
+            self._map = map
+
+        def create_socket(self, family=None, type=None):
+            pass
+        def set_socket(self, sock, map=None):
+            self.socket = sock
+        def add_channel(self, map=None):
+            pass
+        def del_channel(self, map=None):
+            pass
+        def handle_read_event(self):
+            pass
+        def handle_write_event(self):
+            pass
+        def handle_expt_event(self):
+            pass
+        def handle_read(self):
+            pass
+        def handle_write(self):
+            pass
+        def handle_error(self):
+            pass
+        def handle_close(self):
+            pass
+        def handle_connect(self):
+            pass
+        def handle_accept(self):
+            pass
+        def readable(self):
+            return True
+        def writable(self):
+            return True
+        def close(self):
+            pass
+        def recv(self, buffer_size):
+            return b''
+        def send(self, data):
+            return len(data)
+
+    mock_asyncore.dispatcher = MockDispatcher
+    mock_asyncore.dispatcher_with_send = MockDispatcher
+    mock_asyncore.loop = lambda *args, **kwargs: None
+    mock_asyncore.socket_map = {}
+    mock_asyncore.close_all = lambda *args, **kwargs: None
     sys.modules["asyncore"] = mock_asyncore
+    print("Using mock asyncore for Python 3.12+")
 
 from cassandra.cluster import Cluster, Session
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import SimpleStatement
-from cassandra.io.asyncioreactor import AsyncioConnection
+# Note: On n'utilise pas AsyncioConnection car il a des problèmes de compatibilité
+# Le driver fonctionne de manière synchrone mais c'est OK pour notre use case
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
@@ -36,9 +95,8 @@ class CassandraDB:
             # Connexion au cluster (sans authentification pour une démo)
             self.cluster = Cluster(
                 contact_points=settings.cassandra_hosts,
-                port=settings.cassandra_port,
-                protocol_version=4,
-                connection_class=AsyncioConnection
+                port=settings.cassandra_port
+                # Utilise la configuration par défaut synchrone
             )
             
             self.session = self.cluster.connect()

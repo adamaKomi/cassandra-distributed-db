@@ -1,13 +1,9 @@
 """
 Configuration de l'API REST pour le projet Cassandra IoT
 """
-from pydantic_settings import BaseSettings
-from typing import List
 
-
-# Configuration des paramètres de l'application par defaut 
-# ou lecture depuis des variables d'environnement
-class Settings(BaseSettings):
+# Configuration en dur pour éviter les problèmes de parsing Pydantic
+class Settings:
     """Configuration de l'application"""
     
     # Configuration de l'API
@@ -15,17 +11,13 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = True
     
-    # Configuration Cassandra
-    cassandra_hosts: List[str] = ["192.168.1.10", "192.168.1.11", "192.168.1.12"]
+    # Configuration Cassandra - IPs en dur
+    cassandra_hosts = ["cassandra", "192.168.1.42"]
     cassandra_port: int = 9042
     cassandra_keyspace: str = "iot_demo"
     
-    # CORS (pour permettre au frontend d'accéder à l'API)
-    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # CORS
+    cors_origins = ["http://localhost:5173", "http://localhost:3000", "*"]
 
 
 # Instance globale des settings

@@ -1,0 +1,30 @@
+services:
+  cassandra-node:
+    image: cassandra:4.1
+    container_name: cassandra-node
+    ports:
+      - "9042:9042" # Client port (pour l'API)
+      - "7000:7000" # Intra-node communication (Gossip entre les noeuds)
+    environment:
+      - CASSANDRA_CLUSTER_NAME=IoTCluster
+      
+      # IMPORTANT : Écoute interne sur l'interface du conteneur (évite le crash "Cannot assign requested address")
+      - CASSANDRA_LISTEN_ADDRESS=cassandra-node
+      
+      # Publicité externe : C'est l'IP que les AUTRES PC utiliseront pour parler à ce noeud
+      - CASSANDRA_BROADCAST_ADDRESS=${HOST_IP}
+      
+      # Pointeur vers le PC Seed (le chef d'orchestre initial)
+      - CASSANDRA_SEEDS=${SEED_IP}
+      
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      
+      # Optionnel : Limiter la RAM pour éviter de faire planter un petit PC portable (1Go max)
+      - HEAP_NEWSIZE=128M
+      - MAX_HEAP_SIZE=1024M
+
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10

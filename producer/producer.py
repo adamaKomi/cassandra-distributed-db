@@ -4,11 +4,22 @@ import time                     #3. Importation de la bibliothèque time
 from datetime import datetime   #4. Importation de la bibliothèque datetime
 import random                   #5. Importation de la bibliothèque random
 
-# 1. Connexion à Kafka
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',#Adresse de mon serveur Kafka
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
+import os
+
+# 1. Connexion à Kafka avec retry
+bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+
+producer = None
+while producer is None:
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers=bootstrap_servers,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+        print("Connecté à Kafka !")
+    except Exception as e:
+        print(f"En attente de Kafka... ({e})")
+        time.sleep(2)
 
 # 2. Topic Kafka
 TOPIC = 'sensor-data' #Nom de mon topic Kafka

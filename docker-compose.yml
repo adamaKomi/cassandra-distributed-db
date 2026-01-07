@@ -78,9 +78,8 @@ services:
     restart: on-failure
     environment:
       KAFKA_BOOTSTRAP: kafka:29092
-      # On pointe vers le service local ET l'IP distante pour la robustesse des tests
-      CASSANDRA_HOSTS: cassandra,${HOST_IP:-localhost}
-      CASSANDRA_REPLICATION_FACTOR: 2
+      CASSANDRA_HOSTS: cassandra
+      CASSANDRA_REPLICATION_FACTOR: 1
 
   api:
     build:

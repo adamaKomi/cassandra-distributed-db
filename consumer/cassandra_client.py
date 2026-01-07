@@ -109,7 +109,7 @@ class CassandraWriter:
             VALUES (?, ?, ?)
             """
         )
-        self.insert_stmt.consistency_level = ConsistencyLevel.LOCAL_QUORUM
+        self.insert_stmt.consistency_level = ConsistencyLevel.ONE
 
     def _init_schema(self):
         """Initialise le Keyspace et la Table si inexistants."""
@@ -147,7 +147,7 @@ class CassandraWriter:
         if not self.session or not self.insert_stmt:
             raise RuntimeError("Cassandra session not initialized")
 
-        batch = BatchStatement(consistency_level=ConsistencyLevel.LOCAL_QUORUM)
+        batch = BatchStatement(consistency_level=ConsistencyLevel.ONE)
         for reading in readings:
             batch.add(self.insert_stmt, (reading.sensor_id, reading.timestamp, reading.value))
 

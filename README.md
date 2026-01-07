@@ -233,24 +233,62 @@ L'API expose les données des capteurs via FastAPI.
 
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
-| `GET` | `/health` | État de santé de l'API |
-| `GET` | `/sensors` | Liste tous les capteurs |
-| `GET` | `/sensors/last` | Dernière valeur d'un capteur |
-| `GET` | `/sensors/{id}/stats` | Statistiques d'un capteur |
-| `GET` | `/sensors/{id}/history` | Historique pour graphiques |
+| `GET` | `/` | Informations de l'API et liste des endpoints |
+| `GET` | `/health` | État de santé de l'API et connexion Cassandra |
+| `GET` | `/sensors` | Liste tous les capteurs avec dernières lectures |
+| `GET` | `/sensors/{sensor_id}` | Informations détaillées d'un capteur spécifique |
+| `GET` | `/sensors/{sensor_id}/latest` | Dernière lecture d'un capteur |
+| `GET` | `/sensors/{sensor_id}/history` | Historique des lectures (paramètres: limit, hours) |
+| `GET` | `/cluster/status` | Statut du cluster Cassandra |
 
-### Exemple de Requête
+### Exemple de Requêtes
 
 ```bash
+# État de santé
+curl http://localhost:8000/health
+
+# Liste des capteurs
+curl http://localhost:8000/sensors
+
 # Dernière valeur du capteur sensor_001
-curl http://localhost:8000/sensors/last?sensor_id=sensor_001
+curl http://localhost:8000/sensors/sensor_001/latest
+
+# Historique du capteur sensor_001 (100 dernières lectures)
+curl http://localhost:8000/sensors/sensor_001/history
+
+# Historique limité aux 24 dernières heures
+curl "http://localhost:8000/sensors/sensor_001/history?hours=24"
+
+# Statut du cluster
+curl http://localhost:8000/cluster/status
 ```
 
+### Réponse Exemple
+
 ```json
+// /health
+{
+  "status": "healthy",
+  "cassandra_connected": true,
+  "cassandra_nodes": ["192.168.1.6", "192.168.1.42"],
+  "message": "API opérationnelle"
+}
+
+// /sensors/sensor_001/latest
 {
   "sensor_id": "sensor_001",
-  "timestamp": "2026-01-07T19:31:35",
+  "timestamp": "2026-01-07T19:31:35.123000",
   "value": 22.69
+}
+
+// /cluster/status
+{
+  "connected": true,
+  "nodes": [
+    {"address": "192.168.1.6", "datacenter": "dc1", "rack": "rack1", "is_up": true},
+    {"address": "192.168.1.42", "datacenter": "dc1", "rack": "rack1", "is_up": true}
+  ],
+  "keyspace": "iot_demo"
 }
 ```
 
@@ -260,7 +298,81 @@ Accédez à la documentation Swagger : http://localhost:8000/docs
 
 ---
 
-## 📚 Documentation
+## � Gestion des Nœuds du Cluster
+
+### Ajouter un nœud
+
+**Sur le nouveau PC** (ex: PC3 avec IP 192.168.1.100) :
+```powershell
+# 1. Définir les variables
+$env:HOST_IP="192.168.1.100"
+$env:SEED_IP="192.168.1.6"
+
+# 2. Lancer le nœud Cassandra
+docker-compose -f docker-compose-cassandra-node.yml up -d
+```
+
+**Sur PC1 (Master)** - Après l'ajout :
+```powershell
+# 1. Vérifier que le nœud a rejoint
+docker exec -it nosqlproject-cassandra-1 nodetool status
+
+# 2. Augmenter le facteur de réplication
+docker exec -it nosqlproject-cassandra-1 cqlsh -e "ALTER KEYSPACE iot_demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '2'};"
+
+# 3. Mettre à jour docker-compose.yml → CASSANDRA_REPLICATION_FACTOR: 2
+
+# 4. Redémarrer le consumer
+docker-compose up -d --build consumer
+```
+
+### Retirer un nœud
+
+**Cas 1 : Arrêt propre** (nœud accessible)
+```powershell
+# Sur le PC à retirer - Transférer les données avant arrêt
+docker exec -it cassandra-node nodetool decommission
+
+# Puis arrêter
+docker-compose -f docker-compose-cassandra-node.yml down -v
+```
+
+**Cas 2 : Nœud en panne** (inaccessible)
+```powershell
+# Sur PC1 - Obtenir le Host ID du nœud mort
+docker exec -it nosqlproject-cassandra-1 nodetool status
+
+# Retirer le nœud (remplacer <HOST_ID>)
+docker exec -it nosqlproject-cassandra-1 nodetool removenode <HOST_ID>
+```
+
+**Après retrait** - Ajuster la configuration :
+```powershell
+# Réduire le facteur de réplication si nécessaire
+docker exec -it nosqlproject-cassandra-1 cqlsh -e "ALTER KEYSPACE iot_demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};"
+
+# Mettre à jour docker-compose.yml → CASSANDRA_REPLICATION_FACTOR: 1
+
+# Redémarrer le consumer
+docker-compose up -d --build consumer
+```
+
+### Règles de Configuration
+
+| Nœuds | RF recommandé | Consistance | Tolérance pannes |
+|-------|---------------|-------------|------------------|
+| 1 | 1 | ONE | 0 |
+| 2 | 2 | ONE | 0 (lecture seule si 1 tombe) |
+| 3 | 3 | LOCAL_QUORUM | 1 nœud |
+| 5 | 3 | LOCAL_QUORUM | 1 nœud |
+
+> ⚠️ **Important** : Le facteur de réplication (RF) ne peut jamais dépasser le nombre de nœuds actifs, sinon les écritures échouent !
+
+> 📖 **Guide détaillé** : Voir [docs/guide_test_distribue.md](docs/guide_test_distribue.md#7-étendre-le-cluster-ajouter-des-nœuds)
+
+---
+
+## �📚 Documentation
 
 | Document | Description |
 |----------|-------------|

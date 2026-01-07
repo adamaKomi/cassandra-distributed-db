@@ -499,20 +499,52 @@ UN  192.168.1.100  50 KiB     16      33.3%  ...       rack1
 
 ### 7.4 Ajuster le Facteur de Réplication
 
-Après avoir ajouté des nœuds, vous pouvez augmenter le facteur de réplication pour plus de redondance.
+Après avoir ajouté des nœuds, vous **devez** ajuster le facteur de réplication ET la configuration du consumer.
 
-**Exemple** : Passer de `replication_factor: 2` à `replication_factor: 3`
+#### Étape 1 : Modifier le keyspace Cassandra
 
-```sql
--- Sur n'importe quel nœud, via cqlsh
-ALTER KEYSPACE iot_demo 
-WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};
+**Exemple** : Passer de `replication_factor: 1` à `replication_factor: 2`
+
+```powershell
+docker exec -it nosqlproject-cassandra-1 cqlsh -e "ALTER KEYSPACE iot_demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};"
 ```
 
-Puis lancez une réparation pour redistribuer les données :
+#### Étape 2 : Mettre à jour docker-compose.yml
+
+Modifiez la variable `CASSANDRA_REPLICATION_FACTOR` dans le service `consumer` :
+
+```yaml
+  consumer:
+    # ...
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      CASSANDRA_HOSTS: cassandra
+      CASSANDRA_REPLICATION_FACTOR: 2  # ← Ajuster selon le nombre de nœuds
+```
+
+#### Étape 3 : Redémarrer le consumer
+
+```powershell
+docker-compose up -d --build consumer
+```
+
+#### Étape 4 : Réparer les données (optionnel mais recommandé)
+
+Pour redistribuer les données existantes sur le nouveau nœud :
 ```powershell
 docker exec -it nosqlproject-cassandra-1 nodetool repair iot_demo
 ```
+
+#### Tableau des valeurs recommandées
+
+| Nœuds actifs | CASSANDRA_REPLICATION_FACTOR | Niveau de consistance |
+|--------------|------------------------------|----------------------|
+| 1 | 1 | ONE |
+| 2 | 2 | ONE ou LOCAL_QUORUM |
+| 3 | 3 | LOCAL_QUORUM |
+| 4+ | 3 | LOCAL_QUORUM |
+
+> ⚠️ **IMPORTANT** : Si `replication_factor > nombre de nœuds`, toutes les écritures échoueront avec l'erreur "Cannot achieve consistency level"
 
 ### 7.5 Tableau des Configurations Recommandées
 
@@ -528,33 +560,78 @@ docker exec -it nosqlproject-cassandra-1 nodetool repair iot_demo
 
 ### 7.6 Retirer un Nœud du Cluster
 
-Si vous voulez retirer proprement un PC du cluster :
+Si vous voulez retirer proprement un PC du cluster, suivez ces étapes **dans l'ordre** :
 
 #### Option A : Retrait planifié (le nœud est accessible)
 
-Sur le nœud à retirer :
+**Étape 1** : Sur le nœud à retirer, décommissionnez-le (transfère les données) :
 ```powershell
 docker exec -it cassandra-node nodetool decommission
 ```
-Attendez que la commande se termine (peut prendre plusieurs minutes).
-Puis arrêtez le conteneur :
+> ⏱️ Cette commande peut prendre plusieurs minutes selon la quantité de données.
+
+**Étape 2** : Arrêtez le conteneur :
 ```powershell
 docker-compose -f docker-compose-cassandra-node.yml down -v
 ```
 
-#### Option B : Retrait forcé (le nœud est mort/inaccessible)
-
-Sur un nœud **actif** du cluster :
+**Étape 3** : Sur PC1, ajustez le facteur de réplication :
 ```powershell
-# Remplacez par l'IP du nœud mort
-docker exec -it nosqlproject-cassandra-1 nodetool removenode <Host_ID>
+# Si on passe de 2 nœuds à 1 nœud
+docker exec -it nosqlproject-cassandra-1 cqlsh -e "ALTER KEYSPACE iot_demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};"
 ```
 
-Pour trouver le `Host_ID` :
+**Étape 4** : Mettez à jour `docker-compose.yml` sur PC1 :
+```yaml
+  consumer:
+    environment:
+      CASSANDRA_REPLICATION_FACTOR: 1  # ← Réduire selon le nouveau nombre de nœuds
+```
+
+**Étape 5** : Redémarrez le consumer :
+```powershell
+docker-compose up -d --build consumer
+```
+
+---
+
+#### Option B : Retrait forcé (le nœud est mort/inaccessible)
+
+**Étape 1** : Sur PC1, identifiez le Host ID du nœud mort :
 ```powershell
 docker exec -it nosqlproject-cassandra-1 nodetool status
 ```
-C'est la longue chaîne UUID dans la colonne "Host ID".
+Repérez la ligne avec `DN` (Down/Normal) - le Host ID est la longue chaîne UUID.
+
+**Étape 2** : Retirez le nœud mort :
+```powershell
+# Exemple avec un Host ID fictif
+docker exec -it nosqlproject-cassandra-1 nodetool removenode c1bd8a79-5c11-482e-8700-42726045567c
+```
+
+**Étape 3** : Vérifiez que le nœud a disparu :
+```powershell
+docker exec -it nosqlproject-cassandra-1 nodetool status
+```
+
+**Étape 4** : Ajustez le facteur de réplication (comme dans Option A, étapes 3-5).
+
+---
+
+#### Résumé des commandes après retrait
+
+```powershell
+# 1. Réduire le RF dans Cassandra
+docker exec -it nosqlproject-cassandra-1 cqlsh -e "ALTER KEYSPACE iot_demo WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'};"
+
+# 2. Modifier docker-compose.yml → CASSANDRA_REPLICATION_FACTOR: 1
+
+# 3. Reconstruire et relancer le consumer
+docker-compose up -d --build consumer
+
+# 4. Vérifier que tout fonctionne
+docker logs nosqlproject-consumer-1 --tail 10
+```
 
 ### 7.7 Architecture Multi-Datacenter (Avancé)
 

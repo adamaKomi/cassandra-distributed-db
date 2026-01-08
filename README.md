@@ -152,7 +152,7 @@ noSqlProject/
 ```powershell
 # 1. Cloner le projet
 git clone https://github.com/adamaKomi/cassandra-distributed-db.git
-cd noSqlProject
+cd cassandra-distributed-db
 
 # 2. Lancer toute la stack
 docker-compose up -d

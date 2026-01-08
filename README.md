@@ -151,7 +151,7 @@ noSqlProject/
 
 ```powershell
 # 1. Cloner le projet
-git clone <url-du-repo>
+git clone https://github.com/adamaKomi/cassandra-distributed-db.git
 cd noSqlProject
 
 # 2. Lancer toute la stack
